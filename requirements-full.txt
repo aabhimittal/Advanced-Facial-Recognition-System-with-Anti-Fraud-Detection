@@ -1,0 +1,8 @@
+# Optional extras that unlock real webcam/face-detection/deep-embedding adapters.
+# The pipeline runs without these (synthetic + numpy backends), but installing
+# them enables production-grade detection and recognition.
+-r requirements.txt
+opencv-python>=4.5      # webcam capture, real face detection, optical flow
+insightface>=0.7        # ArcFace deep face embeddings (state-of-the-art recognition)
+onnxruntime>=1.12       # runtime for insightface ONNX models
+matplotlib>=3.4         # visualisation of spectral / rPPG signals

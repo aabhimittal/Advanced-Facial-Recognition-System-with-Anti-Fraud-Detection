@@ -1,0 +1,3 @@
+# Core dependencies — the anti-fraud science runs on these alone.
+numpy>=1.21
+scipy>=1.7
