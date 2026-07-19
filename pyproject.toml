@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "faceguard"
+version = "0.1.0"
+description = "Facial recognition with Spectro-Temporal Liveness Fusion anti-fraud detection"
+readme = "README.md"
+requires-python = ">=3.8"
+license = { file = "LICENSE" }
+authors = [{ name = "FaceGuard contributors" }]
+keywords = ["face-recognition", "liveness", "anti-spoofing", "deepfake", "rppg", "biometrics"]
+dependencies = ["numpy>=1.21", "scipy>=1.7"]
+
+[project.optional-dependencies]
+full = ["opencv-python>=4.5", "insightface>=0.7", "onnxruntime>=1.12", "matplotlib>=3.4"]
+dev = ["pytest>=7.0", "ruff>=0.1"]
+
+[project.scripts]
+faceguard = "faceguard.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
