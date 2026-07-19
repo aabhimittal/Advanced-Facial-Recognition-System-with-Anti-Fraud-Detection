@@ -10,5 +10,12 @@ from .spectral import SpectralDetector
 from .rppg import RPPGDetector
 from .texture import TextureDetector
 from .motion import MotionDetector
+from .dct import DCTDeepfakeDetector
 
-__all__ = ["SpectralDetector", "RPPGDetector", "TextureDetector", "MotionDetector"]
+__all__ = [
+    "SpectralDetector",
+    "RPPGDetector",
+    "TextureDetector",
+    "MotionDetector",
+    "DCTDeepfakeDetector",
+]

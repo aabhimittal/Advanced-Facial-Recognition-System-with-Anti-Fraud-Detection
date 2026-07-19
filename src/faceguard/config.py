@@ -32,6 +32,7 @@ class FaceGuardConfig:
             "rppg": 1.0,
             "texture": 0.9,
             "motion": 0.8,
+            "dct": 1.0,
         }
     )
 

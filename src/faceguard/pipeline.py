@@ -17,13 +17,20 @@ from typing import Optional
 
 import numpy as np
 
+from .challenge import Challenge, ChallengeResult, ChallengeType, ChallengeVerifier, issue_challenge
 from .config import FaceGuardConfig
 from .detection import FaceDetector
 from .fusion import SpectroTemporalLivenessFusion
-from .liveness import MotionDetector, RPPGDetector, SpectralDetector, TextureDetector
+from .liveness import (
+    DCTDeepfakeDetector,
+    MotionDetector,
+    RPPGDetector,
+    SpectralDetector,
+    TextureDetector,
+)
 from .liveness.base import as_clip
 from .recognition import FaceEmbedder, FaceMatcher
-from .types import PipelineResult
+from .types import FraudVerdict, PipelineResult
 
 
 class FaceGuardPipeline:
@@ -45,6 +52,8 @@ class FaceGuardPipeline:
         self.texture = TextureDetector()
         self.rppg = RPPGDetector(fps=fps)
         self.motion = MotionDetector()
+        self.dct = DCTDeepfakeDetector()
+        self.challenge_verifier = ChallengeVerifier()
 
     # -- enrolment / recognition -------------------------------------------
     def enroll(self, name: str, face: np.ndarray) -> None:
@@ -62,6 +71,7 @@ class FaceGuardPipeline:
             self.texture.name: self.texture(rep),
             self.rppg.name: self.rppg(clip),
             self.motion.name: self.motion(clip),
+            self.dct.name: self.dct(rep),
         }
         score, confidence, verdict, _ = self.fusion.fuse(results.values())
         return PipelineResult(
@@ -79,6 +89,36 @@ class FaceGuardPipeline:
         name, dist = self.matcher.identify(self.embedder.embed(crop))
         result.identity = name
         result.match_distance = dist
+        return result
+
+    # -- active challenge-response (for SUSPICIOUS cases) ------------------
+    def issue_challenge(
+        self, kind: Optional[ChallengeType] = None, nonce: int = 0
+    ) -> Challenge:
+        """Issue an (ideally random-nonce) challenge to escalate a SUSPICIOUS case."""
+        return issue_challenge(kind=kind, nonce=nonce)
+
+    def verify_challenge(self, response_frames: np.ndarray, challenge: Challenge) -> ChallengeResult:
+        """Check that a captured clip performs the requested action."""
+        return self.challenge_verifier.verify(response_frames, challenge)
+
+    def resolve_suspicious(
+        self,
+        result: PipelineResult,
+        response_frames: np.ndarray,
+        challenge: Challenge,
+    ) -> PipelineResult:
+        """Escalate a SUSPICIOUS result via challenge-response.
+
+        A passed challenge upgrades the verdict to GENUINE; a failed one is treated
+        as an attack and downgraded to FRAUD. GENUINE/FRAUD results are returned
+        unchanged — the challenge only adjudicates the ambiguous middle band.
+        """
+        if result.verdict != FraudVerdict.SUSPICIOUS:
+            return result
+        outcome = self.verify_challenge(response_frames, challenge)
+        result.challenge_passed = outcome.passed
+        result.verdict = FraudVerdict.GENUINE if outcome.passed else FraudVerdict.FRAUD
         return result
 
     # -- helpers -----------------------------------------------------------

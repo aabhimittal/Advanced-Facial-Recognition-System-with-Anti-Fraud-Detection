@@ -54,6 +54,8 @@ class PipelineResult:
     detectors: Dict[str, DetectorResult] = field(default_factory=dict)
     identity: Optional[str] = None
     match_distance: Optional[float] = None
+    # Set when a SUSPICIOUS case was escalated to an active challenge-response.
+    challenge_passed: Optional[bool] = None
 
     def is_trustworthy_match(self) -> bool:
         """True only when the face both matched an identity and passed liveness."""
