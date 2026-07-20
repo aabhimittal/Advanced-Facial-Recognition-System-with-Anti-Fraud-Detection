@@ -8,7 +8,7 @@ import sys
 import numpy as np
 
 from .pipeline import FaceGuardPipeline
-from .utils import synth_live_clip, synth_spoof_clip
+from .utils import synth_challenge_clip, synth_deepfake_clip, synth_live_clip, synth_spoof_clip
 
 
 def _print_result(label: str, result) -> None:
@@ -24,11 +24,24 @@ def _cmd_demo(args: argparse.Namespace) -> int:
     pipe = FaceGuardPipeline()
     live = pipe.analyze(synth_live_clip(seed=args.seed))
     spoof = pipe.analyze(synth_spoof_clip(seed=args.seed))
+    deepfake = pipe.analyze(synth_deepfake_clip(seed=args.seed))
     _print_result("LIVE face (genuine)", live)
     _print_result("SPOOF face (replay/print)", spoof)
-    ok = live.verdict.value == "genuine" and spoof.verdict.value == "fraud"
-    print("\nSpectro-Temporal Liveness Fusion separated live from spoof:",
-          "YES ✅" if ok else "NO ❌")
+    _print_result("DEEPFAKE face (GAN fingerprint)", deepfake)
+    ok = (
+        live.verdict.value == "genuine"
+        and spoof.verdict.value == "fraud"
+        and deepfake.verdict.value != "genuine"
+    )
+    print("\nSTLF separated live from spoof + deepfake:", "YES ✅" if ok else "NO ❌")
+
+    # Challenge-response: escalate a SUSPICIOUS case with a random nonce.
+    challenge = pipe.issue_challenge(nonce=args.seed)
+    print(f"\n--- Challenge-response (for SUSPICIOUS cases) ---\nPrompt: {challenge.instruction}")
+    good = pipe.verify_challenge(synth_challenge_clip(challenge.kind.value, respond=True), challenge)
+    replay = pipe.verify_challenge(synth_challenge_clip("blink", respond=False), challenge)
+    print(f"  matching response : passed={good.passed} (conf={good.confidence:.2f})")
+    print(f"  replay / no action: passed={replay.passed}")
     return 0 if ok else 1
 
 

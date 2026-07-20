@@ -7,10 +7,13 @@ carry a pulse and rich micro-texture while a "spoof" really does carry a display
 grid and no pulse. It is a teaching/verification tool, **not** a substitute for
 evaluating on real anti-spoofing datasets (see docs/EVALUATION.md).
 
-Live sample encodes:  natural 1/f spectrum · rich micro-texture · a periodic
-                      rPPG pulse in the green channel · non-rigid micro-motion.
-Spoof sample encodes: display pixel grid (periodic HF peaks) · blurred/uniform
-                      micro-texture · no pulse · rigid global motion only.
+Live sample encodes:    natural 1/f spectrum · rich micro-texture · a periodic
+                        rPPG pulse in the green channel · non-rigid micro-motion.
+Spoof sample encodes:   display pixel grid (periodic HF peaks) · blurred/uniform
+                        micro-texture · no pulse · rigid global motion only.
+Deepfake sample encodes: GAN upsampling checkerboard (block-DCT fingerprint) ·
+                        rich texture & synthesised motion (so it *looks* live) ·
+                        no coherent pulse — the case the DCT head is built for.
 """
 
 from __future__ import annotations
@@ -57,6 +60,75 @@ def synth_spoof_clip(seed: int = 0, size: int = 96, frames: int = 60) -> np.ndar
         dy, dx = int(2 * np.sin(t / 8.0)), int(2 * np.cos(t / 11.0))
         clip[t] = np.clip(np.roll(np.roll(base, dy, 0), dx, 1), 0, 1)
     return clip
+
+
+def synth_deepfake_face(seed: int = 0, size: int = 128) -> np.ndarray:
+    """A single RGB face carrying a GAN upsampling fingerprint (H, W, 3) in [0, 1]."""
+    rng = np.random.default_rng(seed)
+    return _gan_fingerprint(_base_face(rng, size, spoof=False))
+
+
+def synth_deepfake_clip(seed: int = 0, size: int = 96, frames: int = 60) -> np.ndarray:
+    """A deepfake video (T, H, W, 3): looks live (texture + motion) but has the GAN
+    block-DCT fingerprint and no coherent blood-volume pulse."""
+    rng = np.random.default_rng(seed)
+    base = _gan_fingerprint(_base_face(rng, size, spoof=False))
+    clip = np.empty((frames, size, size, 3))
+    expr = pink_field(rng, size, size, beta=2.0)[..., None]
+    for t in range(frames):
+        # Synthesised non-rigid motion (a generated video is not a still photo)...
+        # ...driven by BROADBAND random amplitude, so there is no single-frequency
+        # in-band peak -> no coherent pulse for rPPG to lock onto.
+        frame = base + rng.normal(0.0, 0.02) * expr
+        clip[t] = np.clip(np.roll(frame, rng.integers(-1, 2), axis=0), 0, 1)
+    return clip
+
+
+def synth_challenge_clip(
+    kind: str, respond: bool = True, seed: int = 0, size: int = 96, frames: int = 60
+) -> np.ndarray:
+    """A live-face clip that performs (``respond=True``) or omits the requested
+    action. ``kind`` is a ``ChallengeType`` value: 'blink' | 'turn_left' |
+    'turn_right' | 'nod'. A non-responding clip should fail the matching check —
+    which is exactly how a pre-recorded replay behaves against a random prompt."""
+    rng = np.random.default_rng(seed)
+    base = _base_face(rng, size, spoof=False)
+    clip = np.empty((frames, size, size, 3))
+    mid = frames // 2
+    for t in range(frames):
+        frame = base.copy()
+        if respond:
+            f = t / (frames - 1)
+            if kind == "turn_left":
+                frame = np.roll(frame, -int(round(12 * f)), axis=1)
+            elif kind == "turn_right":
+                frame = np.roll(frame, int(round(12 * f)), axis=1)
+            elif kind == "nod":
+                frame = np.roll(frame, int(round(8 * np.sin(np.pi * f))), axis=0)
+            elif kind == "blink" and abs(t - mid) <= 2:
+                # Briefly darken the eye band (rows ~0.2-0.45 of height).
+                frame[int(0.2 * size):int(0.45 * size)] *= 0.5
+        # A little involuntary jitter regardless, so it is a real (live) clip.
+        frame = np.roll(frame, rng.integers(-1, 2), axis=0)
+        clip[t] = np.clip(frame, 0, 1)
+    return clip
+
+
+def _gan_fingerprint(rgb: np.ndarray, strength: float = 0.06) -> np.ndarray:
+    """Inject a transposed-convolution "checkerboard" fingerprint.
+
+    Downsample-then-nearest-upsample creates period-2 block structure, and an
+    explicit Nyquist checkerboard adds the tell-tale high-frequency corner energy
+    that block-DCT analysis detects.
+    """
+    h, w, _ = rgb.shape
+    small = rgb[::2, ::2]
+    up = np.kron(small, np.ones((2, 2, 1)))[:h, :w]
+    out = 0.5 * rgb + 0.5 * up
+    yy, xx = np.mgrid[0:h, 0:w]
+    checker = ((xx + yy) % 2) * 2.0 - 1.0  # ±1 at period 2 (Nyquist)
+    out = out * (1.0 + strength * checker[..., None])
+    return np.clip(out, 0, 1)
 
 
 def _base_face(rng: np.random.Generator, size: int, spoof: bool) -> np.ndarray:

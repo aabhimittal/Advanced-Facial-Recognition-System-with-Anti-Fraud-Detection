@@ -27,12 +27,14 @@ common design patterns each have a structural weakness:
 Two ideas, combined:
 
 - **Orthogonality.** We pick cues whose failure modes are independent:
-  - *Spectral* — global frequency structure (`1/f` vs periodic display/GAN peaks)
+  - *Spectral* — global frequency structure (`1/f` vs periodic display peaks)
   - *rPPG* — a physiological pulse that only living skin has
   - *Micro-texture* — local, stochastic, aperiodic skin detail
   - *Micro-motion* — non-rigid 3-D deformation a flat spoof cannot produce
+  - *DCT deepfake* — the block-DCT upsampling fingerprint of generated imagery
   A print kills the pulse; a screen adds a periodic spectrum and texture; a
-  waved photo has only rigid motion. No single attack satisfies all four.
+  waved photo has only rigid motion; a deepfake leaves a Nyquist checkerboard in
+  the block-DCT even when it *looks* live. No single attack satisfies all five.
 
 - **Per-sample reliability.** Each detector returns `(score sᵢ, reliability rᵢ)`.
   Reliability is a *self-assessment of signal quality*: rPPG lowers it when there
@@ -100,12 +102,27 @@ must report calibrated reliability, and fusion is a confidence-weighted Bayesian
 pool with an explicit low-confidence downgrade. That combination — adaptive,
 auditable, abstention-aware — is the contribution.
 
-## 5. How to push it further
+## 5. Learned weights & active escalation (implemented)
 
-- **Learn `wᵢ`** by logistic regression of the label on the per-cue `logit(sᵢ)`
-  features over a labelled PAD set — STLF is already linear in log-odds, so the
-  learned coefficients *are* the weights.
+Two extensions ship in the library and make the contract concrete:
+
+- **Learned `wᵢ` (`fusion/calibration.py`).** Because STLF is linear in log-odds,
+  the per-cue features are exactly `xᵢ = rᵢ·logit(sᵢ)` and a logistic regression's
+  coefficients *are* the weights (its intercept is `logit(p₀)`). Weights are
+  constrained non-negative, preserving "a cue is a unit of trust". On the bundled
+  synthetic set this lifts held-out accuracy from ~0.63 to 1.0.
+- **Challenge-response (`challenge/`).** The `SUSPICIOUS` band is not a dead end:
+  the system issues a random blink / head-turn / nod prompt and verifies the
+  *specific* action from the response clip's motion trajectory and eye signal.
+  Unpredictability is the security property — a pre-recorded replay of a
+  different action (or no action) is rejected, with zero false-accepts across all
+  mismatched action pairs in the test suite.
+
+## 6. How to push it further
+
 - **Calibrate `sᵢ`** per detector (Platt / isotonic) so `logit(sᵢ)` is a true
   log-likelihood-ratio; then the pool is exactly a naive-Bayes combination.
 - **Reliability from signal quality indices** (rPPG SNR, crop resolution, blur)
   rather than the current monotone proxies.
+- **Landmark-based challenge verification** — replace the region heuristics with a
+  face mesh for finer actions (gaze direction, mouth shape).

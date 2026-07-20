@@ -46,10 +46,15 @@ published systems lack.
 
 | Cue | Physical signal it exploits | Spoofs it catches |
 |-----|------------------------------|-------------------|
-| **Spectral** | Natural `1/f` image spectrum | screens, prints, GAN deepfakes (periodic HF peaks) |
+| **Spectral** | Natural `1/f` image spectrum | screens, prints (periodic HF peaks) |
 | **rPPG pulse** | Heartbeat colour change in skin | prints, masks, still images (no pulse) |
 | **Micro-texture** | Stochastic, aperiodic skin detail | display grids & halftone (periodic), matte prints (smooth) |
 | **Micro-motion** | Non-rigid 3-D facial deformation | a waved flat photo (rigid motion only) |
+| **DCT deepfake** | Block-DCT upsampling fingerprint | GAN/diffusion deepfakes (Nyquist checkerboard) |
+
+For the ambiguous middle (`SUSPICIOUS`), FaceGuard escalates to **active
+challenge-response** — a randomly chosen blink / head-turn / nod prompt that a
+pre-recorded replay cannot satisfy.
 
 **The twist — confidence-weighted Bayesian fusion.** Every detector returns not
 just a liveness score `sᵢ ∈ [0,1]` but a **self-estimated reliability**
@@ -99,10 +104,16 @@ Example output:
     - rppg      score=0.985  reliability=0.200
     - motion    score=0.571  reliability=1.000
 
-=== SPOOF face (replay/print) ===
+=== DEEPFAKE face (GAN fingerprint) ===
   verdict          : FRAUD
-  liveness score   : 0.066
+  liveness score   : 0.026
+    - dct       score=0.000  reliability=0.500   <- the decisive cue here
   ...
+
+--- Challenge-response (for SUSPICIOUS cases) ---
+Prompt: Please turn your head to the left.
+  matching response : passed=True (conf=0.95)
+  replay / no action: passed=False
 ```
 
 ### Use it in code
@@ -126,6 +137,37 @@ The security property in one test: a **spoof of an enrolled user still matches
 their identity but is rejected by liveness**, so `is_trustworthy_match()` is
 `False` — see `tests/test_pipeline.py`.
 
+### Learn the fusion weights from a labelled PAD set
+
+STLF is linear in log-odds, so learning the weights is just a logistic
+regression on the reliability-scaled per-cue contributions:
+
+```python
+from faceguard.fusion import fit_fusion_weights
+
+# samples[k] = PipelineResult.detectors for example k; labels[k] = 1 genuine / 0 spoof
+samples = [pipe.analyze(clip).detectors for clip in clips]
+config = fit_fusion_weights(samples, labels)   # -> calibrated FaceGuardConfig
+tuned = FaceGuardPipeline(config=config)        # weights + prior now data-driven
+```
+
+On the bundled synthetic set this lifts held-out accuracy from ~0.63 to 1.0 and
+sensibly upweights the most discriminative cues (texture, rPPG).
+
+### Escalate SUSPICIOUS cases with challenge-response
+
+```python
+from faceguard import ChallengeType
+
+result = pipe.analyze(clip)
+if result.verdict.value == "suspicious":
+    challenge = pipe.issue_challenge(nonce=session_nonce)   # random, unpredictable
+    print(challenge.instruction)                            # "Please turn your head to the left."
+    response_clip = capture_from_webcam()                   # user reacts
+    result = pipe.resolve_suspicious(result, response_clip, challenge)
+    # passed -> GENUINE, failed/replayed -> FRAUD
+```
+
 ### Real webcam / ArcFace (optional)
 
 ```bash
@@ -143,19 +185,21 @@ automatically — the STLF core is unchanged.
 ```
 frame(s) ──▶ FaceDetector ──▶ crop
                                 │
-        ┌───────────────┬──────┴──────┬────────────────┐
-        ▼               ▼             ▼                ▼
-   SpectralDetector TextureDetector RPPGDetector  MotionDetector
-    (FFT 1/f)      (LBP + period.)  (POS pulse)   (non-rigid flow)
-        │  (score, reliability) for each              │
-        └───────────────┬─────────────────────────────┘
-                        ▼
-        Spectro-Temporal Liveness Fusion  (Bayesian log-odds pool)
-                        ▼
-             verdict ∈ {GENUINE, SUSPICIOUS, FRAUD}  +  confidence
-                        │
-                        ▼  (if GENUINE)
-              FaceEmbedder + FaceMatcher ──▶ identity
+     ┌──────────┬──────────┬────┴─────┬───────────┬──────────┐
+     ▼          ▼          ▼          ▼           ▼          │
+ Spectral   Texture     RPPG      Motion    DCT-deepfake     │
+ (FFT 1/f) (LBP+per.) (POS pulse)(non-rigid)(block-DCT)      │
+     │   (score, reliability) for each                        │
+     └──────────┬─────────────────────────────────────────────┘
+                ▼
+   Spectro-Temporal Liveness Fusion  (Bayesian log-odds pool)
+   weights learnable via logistic regression on a labelled PAD set
+                ▼
+     verdict ∈ {GENUINE, SUSPICIOUS, FRAUD}  +  confidence
+        │                    │
+        │ SUSPICIOUS ──▶ Challenge-response (blink/turn/nod) ──▶ GENUINE|FRAUD
+        ▼  (if GENUINE)
+   FaceEmbedder + FaceMatcher ──▶ identity
 ```
 
 Each box is one small, independently testable module under `src/faceguard/`.
@@ -179,22 +223,24 @@ See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 ```
 src/faceguard/
-  liveness/    spectral · texture · rppg · motion detectors  (the physics)
-  fusion/      stlf.py — the novel confidence-weighted Bayesian pool
+  liveness/    spectral · texture · rppg · motion · dct deepfake  (the physics)
+  fusion/      stlf.py — the novel Bayesian pool · calibration.py — learned weights
+  challenge/   active blink/turn/nod challenge-response for SUSPICIOUS cases
   recognition/ embedder (numpy | ArcFace) + matcher
   detection/   face detector (centre-crop | OpenCV Haar)
-  utils/       synthetic live/spoof generator (numpy/scipy only)
+  utils/       synthetic live/spoof/deepfake/challenge generators (numpy/scipy)
   pipeline.py  end-to-end orchestration
-tests/         22 tests, run with just numpy + scipy + pytest
+tests/         42 tests, run with just numpy + scipy + pytest
 docs/          NOVEL_TECHNIQUE · ARCHITECTURE · EVALUATION
 ```
 
 ## Roadmap / good first issues
 
+- [x] Learn `detector_weights` on a labelled set (logistic regression on log-odds)
+- [x] Add a DCT-based GAN-fingerprint head for deepfake-specific detection
+- [x] Challenge-response mode (blink / head-turn prompts) for `SUSPICIOUS` cases
 - [ ] rPPG: swap POS for CHROM and add a signal-quality index feeding reliability
-- [ ] Learn `detector_weights` on a labelled set (logistic regression on log-odds)
-- [ ] Add a DCT-based GAN-fingerprint head for deepfake-specific detection
-- [ ] Challenge-response mode (blink / head-turn prompts) for `SUSPICIOUS` cases
+- [ ] Landmark-based challenge verification (replace region heuristics with mesh)
 - [ ] Real-dataset evaluation harness (Replay-Attack / CASIA-SURF / OULU-NPU)
 
 ## References
