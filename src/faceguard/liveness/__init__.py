@@ -6,24 +6,24 @@ liveness *score* and a *reliability* estimate. The reliability is what makes
 the downstream Spectro-Temporal Liveness Fusion adaptive.
 """
 
-from .spectral import SpectralDetector
-from .rppg import RPPGDetector
-from .texture import TextureDetector
-from .motion import MotionDetector
-from .dct import DCTDeepfakeDetector
-from .parallax import ParallaxDetector
-from .sensor import SensorNoiseDetector
 from .banding import DisplayBandingDetector
+from .dct import DCTDeepfakeDetector
+from .motion import MotionDetector
+from .parallax import ParallaxDetector
+from .rppg import RPPGDetector
+from .sensor import SensorNoiseDetector
+from .spectral import SpectralDetector
 from .subsurface import SubsurfaceScatteringDetector
+from .texture import TextureDetector
 
 __all__ = [
-    "SpectralDetector",
-    "RPPGDetector",
-    "TextureDetector",
-    "MotionDetector",
     "DCTDeepfakeDetector",
-    "ParallaxDetector",
-    "SensorNoiseDetector",
     "DisplayBandingDetector",
+    "MotionDetector",
+    "ParallaxDetector",
+    "RPPGDetector",
+    "SensorNoiseDetector",
+    "SpectralDetector",
     "SubsurfaceScatteringDetector",
+    "TextureDetector",
 ]

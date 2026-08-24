@@ -133,7 +133,7 @@ def _cmd_stream(args: argparse.Namespace) -> int:
 def _cmd_analyze(args: argparse.Namespace) -> int:
     try:
         import cv2
-    except Exception:
+    except Exception:  # noqa: BLE001 - any import failure means "OpenCV unavailable"
         print("Reading image/video files needs OpenCV: pip install '.[full]'", file=sys.stderr)
         return 2
     pipe = FaceGuardPipeline()

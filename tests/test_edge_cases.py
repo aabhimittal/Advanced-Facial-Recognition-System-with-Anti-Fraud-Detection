@@ -132,7 +132,7 @@ def test_no_single_detector_can_veto_the_ensemble():
 
     honest = [DetectorResult(n, 0.1, 1.0) for n in ("spectral", "texture", "rppg", "motion")]
     saturated = DetectorResult("dct", 1.0, 1.0)  # claims certainty
-    score, _, verdict, contributions = fuse(honest + [saturated])
+    _, _, verdict, contributions = fuse([*honest, saturated])
     assert abs(contributions["dct"]) <= FaceGuardConfig().max_detector_logit + 1e-9
     assert verdict is FraudVerdict.FRAUD, "four honest detectors were overruled by one"
 

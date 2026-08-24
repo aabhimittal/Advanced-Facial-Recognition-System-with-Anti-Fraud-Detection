@@ -31,6 +31,8 @@ face is doing.
 
 from __future__ import annotations
 
+from functools import lru_cache
+
 import numpy as np
 
 from ..types import DetectorResult
@@ -182,13 +184,16 @@ def _bands(resid: np.ndarray, sigma: float):
     return resid - smooth, smooth - low
 
 
-def _white_band_ratio(sigma: float, _cache: dict = {}) -> float:
-    """The same fine/(fine+mid) ratio measured on ideal white noise — the yardstick."""
-    if sigma not in _cache:
-        w = np.random.default_rng(0).standard_normal((1, 96, 96))
-        fine, mid = _bands(w, sigma)
-        _cache[sigma] = float((fine**2).mean() / ((fine**2).mean() + (mid**2).mean()))
-    return _cache[sigma]
+@lru_cache(maxsize=8)
+def _white_band_ratio(sigma: float) -> float:
+    """The same fine/(fine+mid) ratio measured on ideal white noise — the yardstick.
+
+    Deterministic in ``sigma`` and independent of the sample, so it is computed
+    once per filter width and cached.
+    """
+    w = np.random.default_rng(0).standard_normal((1, 96, 96))
+    fine, mid = _bands(w, sigma)
+    return float((fine**2).mean() / ((fine**2).mean() + (mid**2).mean()))
 
 
 def _flatness_mask(mean: np.ndarray) -> np.ndarray:

@@ -1,3 +1,3 @@
-from .detector import FaceDetector, FaceBox
+from .detector import FaceBox, FaceDetector
 
-__all__ = ["FaceDetector", "FaceBox"]
+__all__ = ["FaceBox", "FaceDetector"]

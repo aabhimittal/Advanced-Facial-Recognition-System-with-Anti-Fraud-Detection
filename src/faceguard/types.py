@@ -4,8 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Dict, Optional, Tuple, TYPE_CHECKING
-
+from typing import TYPE_CHECKING, Dict, Optional, Tuple
 
 if TYPE_CHECKING:  # pragma: no cover - import cycle only matters for type checkers
     from .quality import QualityReport

@@ -31,6 +31,7 @@ import numpy as np
 
 from .liveness.base import as_clip, to_grayscale
 
+
 def _radial_power(power: np.ndarray) -> np.ndarray:
     """Azimuthally averaged power spectrum, indexed by radius from DC."""
     h, w = power.shape
@@ -106,7 +107,7 @@ class CaptureQualityGate:
 
     def __call__(self, frames: np.ndarray) -> QualityReport:
         clip = as_clip(frames)
-        t, h, w, c = clip.shape
+        t, h, w = clip.shape[:3]
         gray = np.stack([to_grayscale(f) for f in clip])  # (T, H, W)
 
         factors = {

@@ -16,44 +16,44 @@ survivable (:mod:`faceguard.recognition.protection`), and a tamper-evident
 decision log (:mod:`faceguard.audit`).
 """
 
-from .types import DetectorResult, FraudVerdict, PipelineResult
-from .pipeline import FaceGuardPipeline
-from .config import FaceGuardConfig
-from .fusion import fit_fusion_weights, WeightCalibrator
-from .challenge import Challenge, ChallengeIssuer, ChallengeType, ChallengeResult
-from .quality import CaptureQualityGate, QualityReport
-from .policy import RiskTier, TierPolicy, config_for, policy_for
-from .sequential import SequentialVerifier, SequentialDecision, SequentialState, sequential_verdict
 from .audit import AuditLog, AuditRecord
+from .challenge import Challenge, ChallengeIssuer, ChallengeResult, ChallengeType
+from .config import FaceGuardConfig
+from .fusion import WeightCalibrator, fit_fusion_weights
+from .pipeline import FaceGuardPipeline
+from .policy import RiskTier, TierPolicy, config_for, policy_for
+from .quality import CaptureQualityGate, QualityReport
 from .recognition.protection import ProtectedMatcher, TemplateProtector
+from .sequential import SequentialDecision, SequentialState, SequentialVerifier, sequential_verdict
+from .types import DetectorResult, FraudVerdict, PipelineResult
 
 __version__ = "0.3.0"
 
 __all__ = [
-    "FaceGuardPipeline",
-    "FaceGuardConfig",
-    "DetectorResult",
-    "FraudVerdict",
-    "PipelineResult",
-    "fit_fusion_weights",
-    "WeightCalibrator",
-    "Challenge",
-    "ChallengeIssuer",
-    "ChallengeType",
-    "ChallengeResult",
-    "CaptureQualityGate",
-    "QualityReport",
-    "RiskTier",
-    "TierPolicy",
-    "config_for",
-    "policy_for",
-    "SequentialVerifier",
-    "SequentialDecision",
-    "SequentialState",
-    "sequential_verdict",
     "AuditLog",
     "AuditRecord",
+    "CaptureQualityGate",
+    "Challenge",
+    "ChallengeIssuer",
+    "ChallengeResult",
+    "ChallengeType",
+    "DetectorResult",
+    "FaceGuardConfig",
+    "FaceGuardPipeline",
+    "FraudVerdict",
+    "PipelineResult",
     "ProtectedMatcher",
+    "QualityReport",
+    "RiskTier",
+    "SequentialDecision",
+    "SequentialState",
+    "SequentialVerifier",
     "TemplateProtector",
+    "TierPolicy",
+    "WeightCalibrator",
     "__version__",
+    "config_for",
+    "fit_fusion_weights",
+    "policy_for",
+    "sequential_verdict",
 ]

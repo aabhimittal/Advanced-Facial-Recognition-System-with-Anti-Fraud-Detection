@@ -114,11 +114,11 @@ def synth_challenge_clip(
         if respond:
             f = t / (frames - 1)
             if kind == "turn_left":
-                frame = np.roll(frame, -int(round(12 * f)), axis=1)
+                frame = np.roll(frame, -round(12 * f), axis=1)
             elif kind == "turn_right":
-                frame = np.roll(frame, int(round(12 * f)), axis=1)
+                frame = np.roll(frame, round(12 * f), axis=1)
             elif kind == "nod":
-                frame = np.roll(frame, int(round(8 * np.sin(np.pi * f))), axis=0)
+                frame = np.roll(frame, round(8 * np.sin(np.pi * f)), axis=0)
             elif kind == "blink" and abs(t - mid) <= 2:
                 # Briefly darken the eye band (rows ~0.2-0.45 of height).
                 frame[int(0.2 * size):int(0.45 * size)] *= 0.5

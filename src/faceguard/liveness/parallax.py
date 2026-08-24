@@ -106,7 +106,7 @@ def _widest_baseline(gray, blocks, probes: int = 4):
     # Average a few adjacent frames per endpoint: cuts noise without materially
     # changing the pose at either end of the baseline.
     span = max(1, t // 12)
-    marks = [int(round(f * (t - span))) for f in np.linspace(0.0, 1.0, probes + 1)]
+    marks = [round(f * (t - span)) for f in np.linspace(0.0, 1.0, probes + 1)]
     ends = [np.mean(gray[m:m + span], axis=0) for m in marks]
 
     best_disp, best_motion = None, -1.0

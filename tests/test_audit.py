@@ -28,7 +28,6 @@ def test_an_intact_chain_verifies(log):
 def test_editing_a_past_record_is_detected_at_its_index(log):
     for _ in range(5):
         log.append(_result())
-    log.records  # a copy: mutating it must not affect the log
     log._records[2].liveness_score = 0.01
     assert log.verify() == 2
 
