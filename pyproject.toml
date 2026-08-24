@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "faceguard"
-version = "0.2.0"
+version = "0.3.0"
 description = "Facial recognition with Spectro-Temporal Liveness Fusion anti-fraud detection"
 readme = "README.md"
 requires-python = ">=3.8"

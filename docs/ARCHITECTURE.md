@@ -16,6 +16,15 @@ backends.
 | `liveness/texture.py` | LBP entropy + autocorrelation periodicity | numpy, scipy |
 | `liveness/motion.py` | non-rigid micro-motion via aligned residual | numpy, scipy |
 | `liveness/dct.py` | block-DCT GAN/deepfake fingerprint | numpy, scipy |
+| `liveness/parallax.py` | depth-parallax geometry: planar vs 3-D motion field | numpy, scipy |
+| `liveness/sensor.py` | photon-transfer noise check (injection attacks) | numpy, scipy |
+| `liveness/banding.py` | rolling-shutter beat against a display refresh | numpy |
+| `liveness/subsurface.py` | wavelength-dependent skin translucency (masks) | numpy, scipy |
+| `quality.py` | capture-quality gate → `INDETERMINATE` instead of a guess | numpy, scipy |
+| `policy.py` | risk-tiered operating points | stdlib only |
+| `sequential.py` | Wald SPRT over a stream of windows | stdlib (+ numpy for windowing) |
+| `audit.py` | hash-chained, privacy-preserving decision log | stdlib only |
+| `recognition/protection.py` | cancellable (BioHashed) templates | numpy |
 | `fusion/stlf.py` | **Spectro-Temporal Liveness Fusion** | stdlib only |
 | `fusion/calibration.py` | learn weights/prior by logistic regression | numpy |
 | `challenge/challenge.py` | active blink/turn/nod challenge-response | numpy, scipy |
@@ -24,6 +33,24 @@ backends.
 | `detection/detector.py` | face box (centre-crop \| OpenCV Haar) | numpy (+ opencv) |
 | `pipeline.py` | wires detect → liveness → fuse → recognise | all of the above |
 | `utils/synthetic.py` | live/spoof generator for demos & CI | numpy, scipy |
+
+## Two orders of decision
+
+The pipeline answers two different questions, in this order, and never conflates
+them:
+
+1. **Can this sample be judged at all?** — `quality.py` plus detector
+   availability. A "no" is `INDETERMINATE`: a capture or system failure, not an
+   accusation. Everything about the input path (bit depth, NaN, ragged frames,
+   frozen feeds) resolves here.
+2. **Is this sample genuine?** — `fusion/stlf.py` over whatever legs reported.
+   Only reachable once question 1 is answered "yes", which is what keeps a dark
+   room from being scored as a print attack.
+
+`faceguard.sequential` sits above both, deciding whether the answers so far are
+enough or whether to keep watching; `faceguard.policy` sets where the thresholds
+for "enough" are, per transaction. See [`EDGE_CASES.md`](EDGE_CASES.md) for the
+catalogue of situations these layers exist to handle.
 
 ## The detector contract
 
@@ -36,7 +63,9 @@ DetectorResult(name: str, score: float, reliability: float, detail: dict)
 - `score ∈ [0,1]` — higher = more likely a genuine live face.
 - `reliability ∈ [0,1]` — the detector's confidence that *this* measurement is
   trustworthy for *this* sample. Return `0.0` to abstain (e.g. temporal
-  detectors on a single frame). This is the only coupling between a detector and
+  detectors on a single frame); `DetectorResult.abstain(name, reason)` is the
+  canonical way to do it, and the pipeline uses it for crashes and timeouts too,
+  so a broken detector and a shy one are handled by the same mathematics. This is the only coupling between a detector and
   the fusion stage, which is what keeps detectors independently testable and the
   fusion backend-agnostic.
 

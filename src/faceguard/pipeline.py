@@ -18,7 +18,14 @@ from typing import Dict, List, Optional, Sequence
 
 import numpy as np
 
-from .challenge import Challenge, ChallengeResult, ChallengeType, ChallengeVerifier, issue_challenge
+from .challenge import (
+    Challenge,
+    ChallengeIssuer,
+    ChallengeResult,
+    ChallengeType,
+    ChallengeVerifier,
+    issue_challenge,
+)
 from .config import FaceGuardConfig
 from .detection import FaceDetector
 from .fusion import SpectroTemporalLivenessFusion
@@ -40,6 +47,13 @@ from .types import DetectorResult, FraudVerdict, PipelineResult
 
 
 class FaceGuardPipeline:
+    @classmethod
+    def for_tier(cls, tier, base: Optional[FaceGuardConfig] = None, **kwargs) -> "FaceGuardPipeline":
+        """Build a pipeline at the operating point of a :class:`~faceguard.policy.RiskTier`."""
+        from .policy import config_for
+
+        return cls(config=config_for(tier, base), **kwargs)
+
     def __init__(
         self,
         config: Optional[FaceGuardConfig] = None,
@@ -48,6 +62,7 @@ class FaceGuardPipeline:
         detector: Optional[FaceDetector] = None,
         fps: float = 30.0,
         quality_gate: Optional[CaptureQualityGate] = None,
+        issuer: Optional[ChallengeIssuer] = None,
     ):
         self.config = config or FaceGuardConfig()
         self.detector = detector or FaceDetector()
@@ -64,7 +79,8 @@ class FaceGuardPipeline:
         self.sensor = SensorNoiseDetector()
         self.banding = DisplayBandingDetector()
         self.subsurface = SubsurfaceScatteringDetector()
-        self.challenge_verifier = ChallengeVerifier()
+        self.issuer = issuer
+        self.challenge_verifier = ChallengeVerifier(issuer=issuer)
         self.quality_gate = quality_gate or CaptureQualityGate(
             min_face_px=self.config.min_face_px,
             min_quality=self.config.min_capture_quality,
@@ -212,9 +228,16 @@ class FaceGuardPipeline:
 
     # -- active challenge-response (for SUSPICIOUS cases) ------------------
     def issue_challenge(
-        self, kind: Optional[ChallengeType] = None, nonce: int = 0
+        self, kind: Optional[ChallengeType] = None, nonce: Optional[int] = None
     ) -> Challenge:
-        """Issue an (ideally random-nonce) challenge to escalate a SUSPICIOUS case."""
+        """Issue a challenge to escalate a SUSPICIOUS case.
+
+        With an issuer configured the challenge is signed, time-limited and
+        single-use; without one it is an unsigned prompt with a TTL, which is
+        fine for a demo and not fine for production.
+        """
+        if self.issuer is not None and nonce is None:
+            return self.issuer.issue(kind=kind)
         return issue_challenge(kind=kind, nonce=nonce)
 
     def verify_challenge(self, response_frames: np.ndarray, challenge: Challenge) -> ChallengeResult:
@@ -229,15 +252,54 @@ class FaceGuardPipeline:
     ) -> PipelineResult:
         """Escalate a SUSPICIOUS result via challenge-response.
 
-        A passed challenge upgrades the verdict to GENUINE; a failed one is treated
-        as an attack and downgraded to FRAUD. GENUINE/FRAUD results are returned
-        unchanged — the challenge only adjudicates the ambiguous middle band.
+        A passed challenge upgrades the verdict to GENUINE; a failed one is
+        treated as an attack and downgraded to FRAUD. GENUINE/FRAUD results are
+        returned unchanged — the challenge only adjudicates the ambiguous middle
+        band. To demand a challenge of an already-GENUINE result (the CRITICAL
+        tier's posture), call :meth:`enforce_challenge` instead.
         """
-        if result.verdict != FraudVerdict.SUSPICIOUS:
+        if result.verdict is not FraudVerdict.SUSPICIOUS:
             return result
+        return self._adjudicate(result, response_frames, challenge)
+
+    def enforce_challenge(
+        self,
+        result: PipelineResult,
+        response_frames: np.ndarray,
+        challenge: Challenge,
+    ) -> PipelineResult:
+        """Require a challenge even for a passively-GENUINE result.
+
+        This is what the CRITICAL risk tier calls (see
+        :attr:`~faceguard.policy.TierPolicy.always_challenge`): for a vault door
+        or a high-value transfer, passive evidence alone is never enough, because
+        the one thing no recording can do is answer a prompt it has not seen.
+        A genuine user who simply misses the prompt drops to SUSPICIOUS and may
+        retry — only a forged or replayed response is treated as an attack.
+        """
+        if result.verdict is FraudVerdict.FRAUD:
+            return result
+        return self._adjudicate(result, response_frames, challenge)
+
+    def _adjudicate(
+        self,
+        result: PipelineResult,
+        response_frames: np.ndarray,
+        challenge: Challenge,
+    ) -> PipelineResult:
+        was_genuine = result.verdict is FraudVerdict.GENUINE
         outcome = self.verify_challenge(response_frames, challenge)
         result.challenge_passed = outcome.passed
-        result.verdict = FraudVerdict.GENUINE if outcome.passed else FraudVerdict.FRAUD
+        if outcome.passed:
+            result.verdict = FraudVerdict.GENUINE
+        elif was_genuine and outcome.reason in ("expired", "action_not_performed"):
+            # A passively-genuine subject who simply missed the prompt (looked
+            # away, took too long) is not an attacker. Downgrade to SUSPICIOUS
+            # and let them try again; reserve FRAUD for a response that was
+            # actively wrong — a replayed or forged nonce.
+            result.verdict = FraudVerdict.SUSPICIOUS
+        else:
+            result.verdict = FraudVerdict.FRAUD
         return result
 
     # -- helpers -----------------------------------------------------------
