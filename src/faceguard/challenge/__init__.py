@@ -10,16 +10,18 @@ satisfy it: this is what defeats the replay attacks passive cues find hardest.
 
 from .challenge import (
     Challenge,
-    ChallengeType,
+    ChallengeIssuer,
     ChallengeResult,
+    ChallengeType,
     ChallengeVerifier,
     issue_challenge,
 )
 
 __all__ = [
     "Challenge",
-    "ChallengeType",
+    "ChallengeIssuer",
     "ChallengeResult",
+    "ChallengeType",
     "ChallengeVerifier",
     "issue_challenge",
 ]

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "faceguard"
-version = "0.2.0"
+version = "0.3.0"
 description = "Facial recognition with Spectro-Temporal Liveness Fusion anti-fraud detection"
 readme = "README.md"
 requires-python = ">=3.8"
@@ -15,7 +15,7 @@ dependencies = ["numpy>=1.21", "scipy>=1.7"]
 
 [project.optional-dependencies]
 full = ["opencv-python>=4.5", "insightface>=0.7", "onnxruntime>=1.12", "matplotlib>=3.4"]
-dev = ["pytest>=7.0", "ruff>=0.1"]
+dev = ["pytest>=7.0", "ruff>=0.5"]
 
 [project.scripts]
 faceguard = "faceguard.cli:main"
@@ -28,3 +28,16 @@ testpaths = ["tests"]
 
 [tool.ruff]
 line-length = 100
+# Pin the target version and the rule set explicitly. Relying on ruff's default
+# selection makes CI non-reproducible: a new ruff release broadens the defaults
+# and turns a green branch red without a single line of code changing.
+target-version = "py39"
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I", "B", "RUF", "BLE"]
+ignore = [
+    # Docstrings here explain physics, and use en/em dashes and maths symbols
+    # deliberately. Flagging those as "ambiguous unicode" is noise.
+    "RUF002",
+    "RUF003",
+]

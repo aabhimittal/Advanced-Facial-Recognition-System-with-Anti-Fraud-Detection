@@ -22,7 +22,7 @@ from __future__ import annotations
 import numpy as np
 
 from ..types import DetectorResult
-from .base import to_grayscale
+from .base import one_sided_score, to_grayscale
 
 # Baselines calibrated against natural face crops. Spoofs push metrics above these.
 _NATURAL_HF_RATIO = 0.18   # typical fraction of energy beyond 0.5*Nyquist
@@ -64,7 +64,9 @@ class SpectralDetector:
         hf_excess = max(0.0, (hf_ratio - _NATURAL_HF_RATIO) / _NATURAL_HF_RATIO)
         peak_excess = max(0.0, (peakiness - _NATURAL_PEAKINESS) / (_NATURAL_PEAKINESS + 1e-6))
         spoof_evidence = 0.6 * hf_excess + 0.4 * peak_excess
-        score = float(np.exp(-spoof_evidence))  # 1 -> natural, ->0 as spoof cues rise
+        # One-sided cue: a clean spectrum caps out below certainty (see
+        # ``one_sided_score``) because a high-quality attack also looks clean.
+        score = one_sided_score(spoof_evidence)
 
         return DetectorResult(
             self.name,

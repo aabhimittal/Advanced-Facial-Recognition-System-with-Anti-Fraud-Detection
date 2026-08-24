@@ -35,7 +35,7 @@ class FaceEmbedder:
         try:
             import insightface  # noqa: F401
             return "arcface"
-        except Exception:
+        except Exception:  # noqa: BLE001 - optional backend: any failure falls back
             return "numpy"
 
     def _init_arcface(self) -> None:

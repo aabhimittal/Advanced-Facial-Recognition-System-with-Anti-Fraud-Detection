@@ -12,7 +12,7 @@ def _r(name, score, rel):
 def test_zero_reliability_detector_is_ignored():
     """A detector with reliability 0 must not move the posterior at all."""
     base = [_r("spectral", 0.9, 0.8)]
-    with_abstainer = base + [_r("rppg", 0.01, 0.0)]  # screaming "spoof" but abstaining
+    with_abstainer = [*base, _r("rppg", 0.01, 0.0)]  # screaming "spoof" but abstaining
     s1, _, _, _ = fuse(base)
     s2, _, _, _ = fuse(with_abstainer)
     assert abs(s1 - s2) < 1e-9
@@ -26,7 +26,7 @@ def test_reliable_evidence_moves_posterior_more():
 
 def test_unanimous_live_is_genuine():
     dets = [_r("spectral", 0.9, 1.0), _r("texture", 0.85, 1.0), _r("rppg", 0.9, 0.8)]
-    score, conf, verdict, _ = fuse(dets)
+    score, _, verdict, _ = fuse(dets)
     assert verdict == FraudVerdict.GENUINE and score > 0.6
 
 

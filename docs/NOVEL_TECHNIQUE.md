@@ -126,3 +126,60 @@ Two extensions ship in the library and make the contract concrete:
   rather than the current monotone proxies.
 - **Landmark-based challenge verification** — replace the region heuristics with a
   face mesh for finer actions (gaze direction, mouth shape).
+
+
+---
+
+## Extensions since the original write-up
+
+The fusion mathematics above is unchanged; three refinements make it hold up
+outside a benchmark.
+
+### 1. One-sided evidence, honestly encoded
+
+Artefact detectors (spectral, DCT, banding) can only ever *observe* an artefact.
+A clean reading is not evidence of life — the cleanest possible image is exactly
+what a sufficiently good attack produces. Encoding those cues on a symmetric
+`[0, 1]` scale silently treats "no moiré" as proof of a heartbeat.
+
+So one-sided cues are capped at `MAX_ONE_SIDED_LIVE = 0.65`:
+
+```
+score = floor + (0.65 − floor) · exp(−evidence)
+```
+
+Presence of an artefact still drives the score to ~0 and dominates the pool;
+absence contributes a mild `logit(0.65) ≈ +0.62`. Certainty of liveness has to be
+*earned* by two-sided cues that measure a positive physiological signal — pulse,
+parallax, subsurface scattering, sensor noise.
+
+### 2. No cue may veto the pool
+
+`logit(1 − 10⁻⁶) ≈ 13.8`. A single detector pinned at its rail could therefore
+overrule every other cue combined — a de-facto veto no individual heuristic has
+earned, and a routine failure mode when a threshold-based cue saturates. Each
+per-detector term is clipped to `±max_detector_logit` (default 4.0), which still
+lets one confident cue move the posterior from 0.5 to ~0.98 on its own, but never
+past a consensus of its peers.
+
+### 3. Sequential extension: the log-odds pool *is* the SPRT statistic
+
+Because STLF already produces its posterior in log-odds, and log-odds relative to
+a 0.5 prior is exactly a log-likelihood ratio, per-window results accumulate into
+Wald's sequential probability ratio test with no additional modelling:
+
+```
+Λ ← Λ + min(1, R_window) · logit(p_window)
+accept if Λ ≥ log((1−β)/α)      reject if Λ ≤ log(β/(1−α))
+```
+
+Reliability scaling carries over from the single-shot case with the same meaning:
+a poor window *slows* the decision rather than corrupting it. This is what turns
+a fixed-window classifier into a streaming decision rule — and its cost model is
+the honest one, since a blatant attack is rejected in one window while a marginal
+subject is simply looked at for longer.
+
+The caveat, stated plainly: Wald's error bounds assume independent evidence, and
+successive windows of one capture are correlated (the attacker is holding the
+same photo the whole time). Treat `far`/`frr` as operating knobs calibrated on
+your own data, not as guarantees.

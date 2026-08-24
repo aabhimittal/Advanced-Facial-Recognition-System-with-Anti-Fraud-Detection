@@ -33,7 +33,7 @@ class FaceDetector:
             path = cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
             self._cascade = cv2.CascadeClassifier(path)
             self._cv2 = cv2
-        except Exception:
+        except Exception:  # noqa: BLE001 - optional backend: any failure falls back
             self._cascade = None
 
     def detect(self, image: np.ndarray) -> List[FaceBox]:
