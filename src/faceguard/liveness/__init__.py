@@ -11,6 +11,10 @@ from .rppg import RPPGDetector
 from .texture import TextureDetector
 from .motion import MotionDetector
 from .dct import DCTDeepfakeDetector
+from .parallax import ParallaxDetector
+from .sensor import SensorNoiseDetector
+from .banding import DisplayBandingDetector
+from .subsurface import SubsurfaceScatteringDetector
 
 __all__ = [
     "SpectralDetector",
@@ -18,4 +22,8 @@ __all__ = [
     "TextureDetector",
     "MotionDetector",
     "DCTDeepfakeDetector",
+    "ParallaxDetector",
+    "SensorNoiseDetector",
+    "DisplayBandingDetector",
+    "SubsurfaceScatteringDetector",
 ]

@@ -41,7 +41,7 @@ def pipe():
 def test_learned_weights_are_valid(pipe):
     samples, labels = _dataset(pipe, range(8))
     cfg = fit_fusion_weights(samples, labels)
-    assert set(cfg.detector_weights) == {"spectral", "texture", "rppg", "motion", "dct"}
+    assert set(cfg.detector_weights) == set(FaceGuardPipeline().detectors)
     for w in cfg.detector_weights.values():
         assert w >= 0.0 and math.isfinite(w)   # non-negativity is enforced
     assert 0.0 < cfg.genuine_prior < 1.0

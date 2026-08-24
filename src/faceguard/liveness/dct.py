@@ -24,7 +24,7 @@ import numpy as np
 from scipy.fft import dctn
 
 from ..types import DetectorResult
-from .base import to_grayscale
+from .base import one_sided_score, to_grayscale
 
 # Natural photos concentrate almost all AC energy in low frequencies.
 _NATURAL_HF_RATIO = 0.06     # AC energy in the high-frequency corner ring
@@ -62,7 +62,8 @@ class DCTDeepfakeDetector:
         hf_excess = max(0.0, (hf_ratio - _NATURAL_HF_RATIO) / _NATURAL_HF_RATIO)
         corner_excess = max(0.0, (corner - _NATURAL_CORNER) / (_NATURAL_CORNER + 1e-6))
         fake_evidence = 0.6 * hf_excess + 0.4 * corner_excess
-        score = float(np.exp(-fake_evidence))  # 1 -> natural, ->0 as fingerprint grows
+        # One-sided cue: no generator fingerprint is not proof of a real camera.
+        score = one_sided_score(fake_evidence)
 
         reliability = float(np.clip((side - self.min_side) / (128 - self.min_side), 0.0, 1.0))
         return DetectorResult(

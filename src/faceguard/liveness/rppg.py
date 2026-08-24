@@ -46,18 +46,34 @@ class RPPGDetector:
 
         # Spatial-mean RGB trace per frame -> (3, T).
         rgb = clip[..., :3].reshape(t, -1, 3).mean(axis=1).T
-        pulse = _pos(rgb)
-        pulse = _bandpass(pulse, self.fps)
+        pulse = _bandpass(_pos(rgb), self.fps)
 
         snr, hr_hz = _band_snr(pulse, self.fps)
-        # Map SNR (dB-like ratio) to a liveness score with a soft threshold at ~3.
-        score = float(1.0 / (1.0 + np.exp(-(snr - 3.0))))
+
+        # Spatial coherence: a blood-volume pulse is one physiological event
+        # driving the *whole* face, so every sub-region must oscillate at the
+        # same frequency and very nearly in phase. Rhythmic motion — a hand
+        # rocking a printed photo, a shaking phone, a subject nodding — also
+        # produces an in-band peak, but its phase varies across the face
+        # because different regions move differently. Requiring coherence is
+        # what stops periodic motion from being sold as a heartbeat, which is
+        # the single most common false-accept path for naive rPPG.
+        coherence = _spatial_coherence(clip, hr_hz, self.fps)
+
+        # Coherence gates the evidence rather than the final score: incoherent
+        # in-band energy is not weak proof of life, it is proof of an artefact.
+        score = float(1.0 / (1.0 + np.exp(-(coherence * snr - 3.0))))
 
         # Reliability scales with clip length: a 1-2s clip is marginal, 5s+ is solid.
         reliability = float(np.clip((t - self.min_frames) / (5 * self.fps), 0.05, 1.0))
         return DetectorResult(
             self.name, score, reliability,
-            {"snr": float(snr), "hr_bpm": float(hr_hz * 60.0), "frames": float(t)},
+            {
+                "snr": float(snr),
+                "hr_bpm": float(hr_hz * 60.0),
+                "coherence": float(coherence),
+                "frames": float(t),
+            },
         )
 
 
@@ -71,6 +87,38 @@ def _pos(rgb: np.ndarray) -> np.ndarray:
     alpha = (s[0].std() + eps) / (s[1].std() + eps)
     h = s[0] + alpha * s[1]
     return h - h.mean()
+
+
+def _spatial_coherence(clip: np.ndarray, hr_hz: float, fps: float, grid: int = 3) -> float:
+    """Phase agreement of the pulse across a ``grid x grid`` tiling of the face.
+
+    Returns the mean resultant length of the per-region phasors at ``hr_hz``:
+    1 = every region beats in phase (physiological), 0 = phases scattered
+    (motion or noise). Regions too dark to carry a plausible pulse are skipped.
+    """
+    if hr_hz <= 0:
+        return 0.0
+    t, h, w = clip.shape[:3]
+    ys = np.linspace(0, h, grid + 1, dtype=int)
+    xs = np.linspace(0, w, grid + 1, dtype=int)
+    win = np.hanning(t)
+    k = 2j * np.pi * hr_hz * np.arange(t) / fps
+    phasors = []
+    for i in range(grid):
+        for j in range(grid):
+            region = clip[:, ys[i]:ys[i + 1], xs[j]:xs[j + 1], :3]
+            if region.size == 0:
+                continue
+            rgb = region.reshape(t, -1, 3).mean(axis=1).T
+            if rgb.mean() < 0.05:      # too dark: no pulse survives there
+                continue
+            pulse = _bandpass(_pos(rgb), fps)
+            z = complex(np.sum(pulse * win * np.exp(-k)))
+            if abs(z) > 0:
+                phasors.append(z / abs(z))
+    if len(phasors) < 4:
+        return 0.0
+    return float(abs(np.mean(phasors)))
 
 
 def _bandpass(x: np.ndarray, fps: float) -> np.ndarray:

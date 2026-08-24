@@ -25,6 +25,9 @@ Working in log-odds (logits), with prior ``p0`` and per-detector base trust
     L = logit(p0) + Σ_i (w_i · r_i) · logit(s_i)
     p_fused = sigmoid(L)
 
+Each per-detector term is additionally capped at ``±max_detector_logit`` so a
+single saturated cue cannot act as an unearned veto over the whole pool.
+
 Because ``logit(0.5) = 0``, a score of exactly 0.5 (pure abstention) contributes
 nothing, and a detector with ``r_i = 0`` drops out entirely — the pool degrades
 gracefully to whatever evidence *is* trustworthy. The fused confidence grows
@@ -41,6 +44,8 @@ from __future__ import annotations
 
 import math
 from typing import Dict, Iterable, Tuple
+
+import numpy as np
 
 from ..config import FaceGuardConfig
 from ..types import DetectorResult, FraudVerdict
@@ -73,10 +78,17 @@ class SpectroTemporalLivenessFusion:
         total_evidence = 0.0
         contributions: Dict[str, float] = {}
 
+        cap = cfg.max_detector_logit
         for r in results:
             w = cfg.detector_weights.get(r.name, 1.0)
             eff = w * r.reliability            # effective pooling weight
-            contribution = eff * _logit(r.score)
+            # Saturation guard: a detector reporting exactly 0 or 1 would
+            # contribute ±13.8 log-odds and single-handedly overrule every other
+            # cue — a de-facto veto that no individual detector has earned, and
+            # a real failure mode when a heuristic pins at its rail. Capping the
+            # per-detector contribution keeps the pool a *pool*: any one leg can
+            # argue forcefully, none can dictate.
+            contribution = float(np.clip(eff * _logit(r.score), -cap, cap))
             log_odds += contribution
             total_evidence += eff
             contributions[r.name] = contribution
